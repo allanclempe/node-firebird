@@ -14,6 +14,16 @@ __Firebird database on social networks__
 - [Firebird on Twitter](https://twitter.com/firebirdsql/)
 - [Firebird on Facebook](https://www.facebook.com/FirebirdSQL)
 
+__Changelog for version v0.9.x__
+
+- Better blob management (warning API Breaking Changes)
+- Much unit-test
+- Better sequentially select (warning API Breaking Changes)
+- Added transation.sequentially
+- Bugs correction
+
+---
+
 __Changelog for version v0.2.x__
 
 - added auto-reconnect
@@ -116,7 +126,7 @@ pool.destroy();
 
 - `db.query(query, [params], function(err, result))` - classic query, returns Array of Object
 - `db.execute(query, [params], function(err, result))` - classic query, returns Array of Array
-- `db.sequentially(query, [params], function(row, index), function(err))` - sequentially query
+- `db.sequentially(query, [params], function(row, index, next), function(err), asArray)` - sequentially query
 - `db.detach(function(err))` detach a database
 - `db.transaction(isolation, function(err, transaction))` create transaction
 
@@ -124,6 +134,7 @@ pool.destroy();
 
 - `transaction.query(query, [params], function(err, result))` - classic query, returns Array of Object
 - `transaction.execute(query, [params], function(err, result))` - classic query, returns Array of Array
+- `transaction.sequentially(query, [params], function(row, index, next), function(err), asArray)` - sequentially query
 - `transaction.commit(function(err))` commit current transaction
 - `transaction.rollback(function(err))` rollback current transaction
 
@@ -187,6 +198,43 @@ Firebird.attach(options, function(err, db) {
 ### READING BLOBS (ASYNCHRONOUS)
 
 ```js
+// async (only with transaction)
+Firebird.attach(options, function(err, db) {
+
+    if (err)
+        throw err;
+    db.transaction(function(err, transaction) {    
+        // db = DATABASE
+        db.query('SELECT ID, ALIAS, USERPICTURE FROM USER', function(err, rows) {
+
+            if (err)
+                throw err;
+
+            // first row
+            rows[0].userpicture(function(err, name, e) {
+
+                if (err)
+                    throw err;
+
+                // +v0.2.4
+                // e.pipe(writeStream/Response);
+
+                // e === EventEmitter
+                e.on('data', function(chunk) {
+                    // reading data
+                });
+
+                e.on('end', function() {
+                    // end reading
+                    // IMPORTANT: close the connection
+                    db.detach();
+                });
+            });
+        });
+    });
+});
+
+// sync blob are fetched automatically
 Firebird.attach(options, function(err, db) {
 
     if (err)
@@ -199,26 +247,8 @@ Firebird.attach(options, function(err, db) {
             throw err;
 
         // first row
-        rows[0].userpicture(function(err, name, e) {
-
-            if (err)
-                throw err;
-
-            // +v0.2.4
-            // e.pipe(writeStream/Response);
-
-            // e === EventEmitter
-            e.on('data', function(chunk) {
-                // reading data
-            });
-
-            e.on('end', function() {
-                // end reading
-                // IMPORTANT: close the connection
-                db.detach();
-            });
-        });
-
+        // userpicture is a Buffer that contain the blob data
+        rows[0].userpicture;
     });
 });
 ```
@@ -232,11 +262,11 @@ Firebird.attach(options, function(err, db) {
         throw err;
 
     // db = DATABASE
-    db.sequentially('SELECT * FROM BIGTABLE', function(row, index) {
+    db.sequentially('SELECT * FROM BIGTABLE', function(row, index, next) {
 
         // EXAMPLE
         stream.write(JSON.stringify(row));
-
+        next()
     }, function(err) {
         // END
         // IMPORTANT: close the connection
@@ -481,6 +511,7 @@ WireCrypt = Disabled
 - Henri Gourvest, <https://github.com/hgourvest>
 - Popa Marius Adrian, <https://github.com/mariuz>
 - Peter Širka, <https://github.com/petersirka>
+- Arnaud Le Roy <https://github.com/sdnetwork>
 
 [license-image]: http://img.shields.io/badge/license-MOZILLA-blue.svg?style=flat
 [license-url]: LICENSE
